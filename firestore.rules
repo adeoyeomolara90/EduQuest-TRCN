@@ -1,0 +1,141 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: users
+// Document ID: uid
+// Fields:
+//   - uid: string (required)
+//   - name: string (required)
+//   - email: string (optional)
+//   - regNumber: string (optional)
+//   - role: string (required, ['candidate', 'admin'])
+//   - createdAt: timestamp (required)
+//
+// Collection: questions
+// Document ID: questionId
+// Fields:
+//   - text: string (required)
+//   - options: list (required)
+//   - correctAnswer: int (required)
+//   - explanation: string (optional)
+//   - difficulty: string (required)
+//   - topic: string (required)
+//
+// Collection: sessions
+// Document ID: sessionId
+// Fields:
+//   - candidateId: string (required)
+//   - startTime: timestamp (required)
+//   - endTime: timestamp (optional)
+//   - status: string (required, ['active', 'completed'])
+//   - questions: list (required)
+//   - answers: map (required)
+//   - flags: list (required)
+//   - violations: list (required)
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') || 
+         request.auth.token.email.matches("(?i)imageandkolors@gmail\\.com"));
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'name', 'role', 'createdAt']) &&
+             data.uid is string && data.uid.size() < 128 &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.role in ['candidate', 'admin'] &&
+             data.createdAt is timestamp &&
+             (!('email' in data) || (data.email is string && data.email.size() < 100)) &&
+             (!('regNumber' in data) || (data.regNumber is string && data.regNumber.size() < 50)) &&
+             (!('examStatus' in data) || (data.examStatus is string)) &&
+             (!('pastAttempts' in data) || (data.pastAttempts is list && data.pastAttempts.size() < 100)) &&
+             (!('attemptedQuestionIds' in data) || (data.attemptedQuestionIds is list && data.attemptedQuestionIds.size() < 1000));
+    }
+
+    function isValidSession(data) {
+      return data.keys().hasAll(['candidateId', 'startTime', 'status', 'questions', 'answers', 'flags', 'violations']) &&
+             data.candidateId == request.auth.uid &&
+             data.status in ['active', 'completed'] &&
+             data.questions is list && data.questions.size() < 100 &&
+             data.answers is map && data.answers.keys().size() < 100 &&
+             data.flags is list && data.flags.size() < 100 &&
+             data.violations is list && data.violations.size() < 500;
+    }
+
+    function isValidQuestion(data) {
+      return data.keys().hasAll(['text', 'options', 'correctAnswer', 'topic']) &&
+             data.text is string && data.text.size() < 5000 &&
+             data.options is list && data.options.size() >= 2 && data.options.size() <= 10 &&
+             data.correctAnswer is int && data.correctAnswer >= 0 && data.correctAnswer < data.options.size() &&
+             data.topic is string && data.topic.size() < 200 &&
+             (!('difficulty' in data) || (data.difficulty is string && data.difficulty.size() < 50)) &&
+             (!('category' in data) || (data.category is string && data.category.size() < 200)) &&
+             (!('explanation' in data) || data.explanation == null || (data.explanation is string && data.explanation.size() < 5000));
+    }
+
+    function isValidConfig(data) {
+      return (!('durationMinutes' in data) || data.durationMinutes is int) &&
+             (!('questionsPerExam' in data) || data.questionsPerExam is int) &&
+             (!('passingScore' in data) || data.passingScore is int) &&
+             (!('allowAIHelp' in data) || data.allowAIHelp is bool);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /config/{document=**} {
+      allow read: if true; // Allow public read for settings
+      allow write: if isAdmin() && isValidConfig(request.resource.data);
+    }
+
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isAuthenticated() && isOwner(uid) && 
+        (request.resource.data.role == 'candidate' || (request.resource.data.role == 'admin' && request.auth.token.email == "imageandkolors@gmail.com"));
+      allow update: if isAdmin() || (isOwner(uid) && request.resource.data.role == resource.data.role);
+      allow delete: if isAdmin();
+    }
+
+    match /questions/{questionId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin() && isValidQuestion(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /sessions/{sessionId} {
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.candidateId || isAdmin());
+      allow create: if isAuthenticated() && isValidSession(request.resource.data);
+      allow update: if isAuthenticated() && (request.auth.uid == resource.data.candidateId || isAdmin()) && isValidSession(request.resource.data);
+    }
+
+    match /ai_cache/{cacheId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated(); // Allow users to contribute to cache
+    }
+
+    match /ai_chat_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+    }
+  }
+}

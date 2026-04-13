@@ -1,0 +1,86 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Candidate or Admin profile",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "regNumber": { "type": "string" },
+        "role": { "type": "string", "enum": ["candidate", "admin"] },
+        "examStatus": { "type": "string", "enum": ["not-started", "in-progress", "completed"] },
+        "pastAttempts": { 
+          "type": "array",
+          "items": { "$ref": "PastAttempt" }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "role"]
+    },
+    "PastAttempt": {
+      "title": "PastAttempt",
+      "description": "Record of a completed exam",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "score": { "type": "number" },
+        "total": { "type": "number" },
+        "percentage": { "type": "number" },
+        "topicScores": { "type": "object" }
+      },
+      "required": ["id", "date", "score", "total", "percentage"]
+    },
+    "Question": {
+      "title": "Question",
+      "description": "Exam question",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "text": { "type": "string" },
+        "options": { "type": "array", "items": { "type": "string" } },
+        "correctAnswer": { "type": "number" },
+        "explanation": { "type": "string" },
+        "difficulty": { "type": "string", "enum": ["easy", "medium", "hard"] },
+        "topic": { "type": "string" }
+      },
+      "required": ["text", "options", "correctAnswer"]
+    },
+    "ExamSession": {
+      "title": "ExamSession",
+      "description": "A candidate's exam session",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "candidateId": { "type": "string" },
+        "startTime": { "type": "string", "format": "date-time" },
+        "endTime": { "type": "string", "format": "date-time" },
+        "durationMinutes": { "type": "number" },
+        "questions": { "type": "array" },
+        "answers": { "type": "object" },
+        "flags": { "type": "array" },
+        "score": { "type": "number" },
+        "percentage": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "completed"] },
+        "violations": { "type": "array", "description": "Log of proctoring violations like tab blur" }
+      },
+      "required": ["candidateId", "startTime", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/questions/{questionId}": {
+      "schema": "Question",
+      "description": "Question pool"
+    },
+    "/sessions/{sessionId}": {
+      "schema": "ExamSession",
+      "description": "Exam sessions"
+    }
+  }
+}

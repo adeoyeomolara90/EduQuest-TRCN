@@ -1,0 +1,21 @@
+{
+  "name": "TRCN Exam Prep",
+  "short_name": "TRCN Prep",
+  "description": "Professional Teaching Standards Exam Preparation App",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "https://picsum.photos/seed/trcn/192/192",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://picsum.photos/seed/trcn/512/512",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
