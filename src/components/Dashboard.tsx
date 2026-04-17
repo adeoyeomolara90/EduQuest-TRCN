@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { 
   Play, 
@@ -18,7 +18,8 @@ import {
   BarChart3,
   Award,
   X,
-  Loader2
+  Loader2,
+  Lightbulb
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -30,6 +31,7 @@ import Certificate from './Certificate';
 import ResultsView from './ResultsView';
 import { db } from '@/src/lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
+import { geminiService } from '@/src/services/geminiService';
 
 import { 
   Radar, 
@@ -64,6 +66,43 @@ export default function Dashboard({ candidate, examSettings, onStart, onResume, 
   const [selectedAttempt, setSelectedAttempt] = useState<PastAttempt | null>(null);
   const [selectedSession, setSelectedSession] = useState<ExamSession | null>(null);
   const [isLoadingSession, setIsLoadingSession] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+
+  // Calculate aggregate topic performance from past attempts
+  const aggregateTopicData: Record<string, { correct: number; total: number }> = {};
+  candidate.pastAttempts.forEach(attempt => {
+    if (attempt.topicScores) {
+      Object.entries(attempt.topicScores).forEach(([topic, data]) => {
+        if (!aggregateTopicData[topic]) aggregateTopicData[topic] = { correct: 0, total: 0 };
+        aggregateTopicData[topic].correct += data.correct;
+        aggregateTopicData[topic].total += data.total;
+      });
+    }
+  });
+
+  useEffect(() => {
+    const fetchSuggestions = async () => {
+      if (candidate.pastAttempts.length === 0) return;
+      
+      setIsLoadingSuggestions(true);
+      try {
+        const perfData = Object.entries(aggregateTopicData).map(([topic, data]) => ({
+          topic,
+          percentage: Math.round((data.correct / data.total) * 100)
+        }));
+        
+        const recommended = await geminiService.getTopicSuggestions(perfData);
+        setSuggestions(recommended);
+      } catch (error) {
+        console.error("Error fetching AI suggestions:", error);
+      } finally {
+        setIsLoadingSuggestions(false);
+      }
+    };
+
+    fetchSuggestions();
+  }, [candidate.pastAttempts.length]);
 
   const handleViewDetails = async (attempt: PastAttempt) => {
     setIsLoadingSession(true);
@@ -82,18 +121,6 @@ export default function Dashboard({ candidate, examSettings, onStart, onResume, 
       setIsLoadingSession(false);
     }
   };
-
-  // Calculate aggregate topic performance from past attempts
-  const aggregateTopicData: Record<string, { correct: number; total: number }> = {};
-  candidate.pastAttempts.forEach(attempt => {
-    if (attempt.topicScores) {
-      Object.entries(attempt.topicScores).forEach(([topic, data]) => {
-        if (!aggregateTopicData[topic]) aggregateTopicData[topic] = { correct: 0, total: 0 };
-        aggregateTopicData[topic].correct += data.correct;
-        aggregateTopicData[topic].total += data.total;
-      });
-    }
-  });
 
   const radarData = Object.entries(aggregateTopicData).map(([topic, data]) => ({
     topic,
@@ -139,6 +166,52 @@ export default function Dashboard({ candidate, examSettings, onStart, onResume, 
             </div>
           </div>
         </div>
+
+        {/* AI Tutor Suggestions */}
+        {candidate.pastAttempts.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-4"
+          >
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-blue-600" />
+              <h2 className="text-lg font-bold text-slate-800">AI Tutor Recommended Topics</h2>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {isLoadingSuggestions ? (
+                Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="h-24 bg-white rounded-2xl border border-slate-100 animate-pulse" />
+                ))
+              ) : (
+                suggestions.map((topic, idx) => (
+                  <Card 
+                    key={idx} 
+                    className="border-none shadow-sm hover:shadow-md transition-all cursor-pointer bg-white group rounded-2xl overflow-hidden border border-slate-100"
+                    onClick={() => {
+                      setSelectedSubject(topic);
+                      onStart(topic);
+                    }}
+                  >
+                    <CardContent className="p-4 flex flex-col justify-between h-full min-h-[100px]">
+                      <div className="flex items-start justify-between">
+                        <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                          <Lightbulb className="w-4 h-4" />
+                        </div>
+                        <Badge variant="outline" className="text-[9px] font-bold text-blue-500 border-blue-100">AI PICK</Badge>
+                      </div>
+                      <h4 className="text-xs font-bold text-slate-800 line-clamp-2 mt-2">{topic}</h4>
+                      <p className="text-[10px] text-slate-500 font-medium flex items-center gap-1 mt-1 group-hover:text-blue-600">
+                        Practice now <Play className="w-2 h-2 fill-current" />
+                      </p>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </div>
+          </motion.div>
+        )}
 
         {/* Active Session Alert */}
         {hasActiveSession && (

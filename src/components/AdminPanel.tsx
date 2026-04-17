@@ -87,6 +87,8 @@ export default function AdminPanel({ examSettings, onQuestionsGenerated, onClose
   const [searchQuery, setSearchQuery] = useState('');
   const [localSettings, setLocalSettings] = useState<ExamSettings>(examSettings);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [roleChangeUser, setRoleChangeUser] = useState<{ id: string, name: string, currentRole: 'candidate' | 'admin' } | null>(null);
+  const [isUpdatingRole, setIsUpdatingRole] = useState(false);
 
   const TOPICS = [
     "English and Communication Skills",
@@ -366,6 +368,22 @@ export default function AdminPanel({ examSettings, onQuestionsGenerated, onClose
       setStatus({ type: 'error', message: 'Extraction failed.' });
     } finally {
       setIsExtracting(false);
+    }
+  };
+
+  const handleUpdateUserRole = async (userId: string, newRole: 'candidate' | 'admin') => {
+    setIsUpdatingRole(true);
+    setStatus(null);
+    try {
+      await updateDoc(doc(db, 'users', userId), { role: newRole });
+      setStatus({ type: 'success', message: `Updated user role to ${newRole}.` });
+      setAllUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } as Candidate : u));
+      setRoleChangeUser(null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
+      setStatus({ type: 'error', message: 'Failed to update user role.' });
+    } finally {
+      setIsUpdatingRole(false);
     }
   };
 
@@ -1076,6 +1094,18 @@ export default function AdminPanel({ examSettings, onQuestionsGenerated, onClose
                         
                         <div className="flex items-center gap-8 w-full sm:w-auto justify-between sm:justify-end">
                           <div className="text-center sm:text-right">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Role</p>
+                            <Badge 
+                              className={cn(
+                                "text-[10px] font-bold uppercase tracking-widest px-2 cursor-pointer transition-all",
+                                user.role === 'admin' ? "bg-purple-100 text-purple-700 hover:bg-purple-200" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                              )}
+                              onClick={() => setRoleChangeUser({ id: user.id || '', name: user.name, currentRole: user.role })}
+                            >
+                              {user.role}
+                            </Badge>
+                          </div>
+                          <div className="text-center sm:text-right hidden xs:block">
                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Attempts</p>
                             <p className="text-sm font-bold text-slate-700">{user.pastAttempts.length}</p>
                           </div>
@@ -1319,6 +1349,45 @@ export default function AdminPanel({ examSettings, onQuestionsGenerated, onClose
             <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end">
               <Button onClick={() => setSelectedUser(null)} className="bg-slate-900 text-white font-bold rounded-xl px-8">
                 Close Report
+              </Button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Role Change Confirmation Modal */}
+      {roleChangeUser && (
+        <div className="fixed inset-0 z-[110] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 md:p-8 space-y-6"
+          >
+            <div className="space-y-2 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-500 flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="w-8 h-8" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900">Change User Role?</h3>
+              <p className="text-sm text-slate-500 font-medium leading-relaxed">
+                Are you sure you want to change <span className="text-slate-900 font-bold">{roleChangeUser.name}</span>'s role from <span className="uppercase text-slate-900 font-bold">{roleChangeUser.currentRole}</span> to <span className="uppercase text-blue-600 font-bold">{roleChangeUser.currentRole === 'admin' ? 'candidate' : 'admin'}</span>?
+              </p>
+            </div>
+            
+            <div className="flex gap-3 pt-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setRoleChangeUser(null)}
+                className="flex-1 rounded-xl font-bold h-12"
+                disabled={isUpdatingRole}
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={() => handleUpdateUserRole(roleChangeUser.id, roleChangeUser.currentRole === 'admin' ? 'candidate' : 'admin')}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold h-12"
+                disabled={isUpdatingRole}
+              >
+                {isUpdatingRole ? <Loader2 className="w-4 h-4 animate-spin" /> : "Confirm Change"}
               </Button>
             </div>
           </motion.div>

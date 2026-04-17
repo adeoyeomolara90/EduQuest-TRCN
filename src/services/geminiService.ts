@@ -229,5 +229,46 @@ export const geminiService = {
       console.error("Error in tutor chat:", error);
       return "I'm sorry, I'm having trouble connecting right now.";
     }
+  },
+
+  async getTopicSuggestions(performanceData: any): Promise<string[]> {
+    try {
+      const prompt = `
+        Based on the following candidate performance data across different teaching exam topics, suggest the top 3-4 most relevant topics they should focus on for their next exam.
+        Focus on topics where they have low scores or topics that are fundamental to professional teaching standards.
+        
+        PERFORMANCE DATA:
+        ${JSON.stringify(performanceData, null, 2)}
+        
+        OUTPUT FORMAT: Return exactly a JSON array of strings containing only the topic names. 
+        Example: ["Educational Psychology", "Curriculum Studies", "Statistics"]
+        Do not include any other text.
+      `;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.0-flash",
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING }
+          }
+        }
+      });
+
+      const text = response.text;
+      if (!text) return [];
+      
+      try {
+        return JSON.parse(text);
+      } catch (parseError) {
+        console.error("Error parsing topic suggestions:", text);
+        return [];
+      }
+    } catch (error) {
+      console.error("Error getting topic suggestions:", error);
+      return [];
+    }
   }
 };

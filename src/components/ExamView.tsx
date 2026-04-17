@@ -464,11 +464,20 @@ export default function ExamView({ session: initialSession, onComplete, onUpdate
                         "h-10 w-10 rounded-lg text-sm font-bold transition-all flex items-center justify-center relative",
                         isCurrent ? "ring-2 ring-blue-600 ring-offset-2 scale-110 z-10" : "",
                         isAnswered ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-400",
-                        isFlagged ? "bg-amber-400 text-white" : "",
+                        isFlagged ? "bg-amber-400 text-white shadow-lg shadow-amber-200" : "",
                         !isAnswered && !isFlagged && !isCurrent ? "hover:bg-slate-200" : ""
                       )}
                     >
                       {idx + 1}
+                      {isFlagged && (
+                        <motion.div
+                          animate={{ scale: [1, 1.2, 1] }}
+                          transition={{ repeat: Infinity, duration: 2 }}
+                          className="absolute -top-1 -right-1"
+                        >
+                          <Flag className="w-3 h-3 text-amber-600 fill-current" />
+                        </motion.div>
+                      )}
                     </button>
                   );
                 })}
@@ -666,21 +675,25 @@ export default function ExamView({ session: initialSession, onComplete, onUpdate
                       const isAnswered = session.answers[currentQuestion.id] !== undefined;
 
                       return (
-                        <button
+                        <motion.button
                           key={idx}
+                          initial={false}
+                          animate={showFeedback ? {
+                            scale: isSelected || isCorrect ? 1.02 : 0.98,
+                            opacity: isAnswered && !isSelected && !isCorrect ? 0.6 : 1
+                          } : { scale: 1, opacity: 1 }}
                           disabled={isAnswered}
                           onClick={() => handleAnswer(idx)}
                           className={cn(
-                            "w-full text-left p-4 md:p-5 rounded-xl border-2 transition-all flex items-center gap-3 md:gap-4 group",
+                            "w-full text-left p-4 md:p-5 rounded-xl border-2 transition-all flex items-center gap-3 md:gap-4 group relative overflow-hidden",
                             isSelected && !showFeedback ? "border-blue-600 bg-blue-50 text-blue-900 shadow-md" : 
-                            showFeedback && isCorrect ? "border-emerald-500 bg-emerald-50 text-emerald-900" :
-                            showFeedback && isSelected && !isCorrect ? "border-red-500 bg-red-50 text-red-900" :
+                            showFeedback && isCorrect ? "border-emerald-500 bg-emerald-50 text-emerald-900 shadow-lg shadow-emerald-100" :
+                            showFeedback && isSelected && !isCorrect ? "border-red-500 bg-red-50 text-red-900 shadow-lg shadow-red-100" :
                             "border-slate-100 hover:border-slate-300 text-slate-600 hover:bg-slate-50",
-                            isAnswered && !isSelected && !isCorrect ? "opacity-50" : ""
                           )}
                         >
                           <div className={cn(
-                            "w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center font-bold text-xs md:text-sm shrink-0 transition-colors",
+                            "w-7 h-7 md:w-8 md:h-8 rounded-xl flex items-center justify-center font-bold text-xs md:text-sm shrink-0 transition-colors",
                             isSelected && !showFeedback ? "bg-blue-600 text-white" :
                             showFeedback && isCorrect ? "bg-emerald-500 text-white" :
                             showFeedback && isSelected && !isCorrect ? "bg-red-500 text-white" :
@@ -689,9 +702,27 @@ export default function ExamView({ session: initialSession, onComplete, onUpdate
                             {String.fromCharCode(65 + idx)}
                           </div>
                           <span className="font-medium text-base md:text-lg leading-snug">{option}</span>
-                          {showFeedback && isCorrect && <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5 text-emerald-500 ml-auto shrink-0" />}
-                          {showFeedback && isSelected && !isCorrect && <XCircle className="w-4 h-4 md:w-5 md:h-5 text-red-500 ml-auto shrink-0" />}
-                        </button>
+                          <AnimatePresence>
+                            {showFeedback && isCorrect && (
+                              <motion.div
+                                initial={{ scale: 0, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                className="ml-auto"
+                              >
+                                <CheckCircle2 className="w-5 h-5 md:w-6 md:h-6 text-emerald-500 shrink-0" />
+                              </motion.div>
+                            )}
+                            {showFeedback && isSelected && !isCorrect && (
+                              <motion.div
+                                initial={{ scale: 0, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                className="ml-auto"
+                              >
+                                <XCircle className="w-5 h-5 md:w-6 md:h-6 text-red-500 shrink-0" />
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </motion.button>
                       );
                     })}
 

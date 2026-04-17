@@ -1,10 +1,10 @@
 {
-  "projectId": "global-ace-455217-v8",
-  "appId": "1:651232637476:web:92d6366a59c1ecee43deb1",
-  "apiKey": "AIzaSyCX2859s6z3V65TEvVUlS6t0Iz3dUDth38",
-  "authDomain": "global-ace-455217-v8.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-3e3cc5b4-cb6e-4a38-95d2-6a541f9d7d9a",
-  "storageBucket": "global-ace-455217-v8.firebasestorage.app",
-  "messagingSenderId": "651232637476",
-  "measurementId": ""
+  "projectId": "fireaibot",
+  "appId": "1:314439880932:web:bd7a7ae45e8911c9ef1cf1",
+  "apiKey": "AIzaSyAGO4f6-qSy25B6BjdnusKv3-PT19IUzYA",
+  "authDomain": "fireaibot.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "fireaibot.firebasestorage.app",
+  "messagingSenderId": "314439880932",
+  "measurementId": "G-MQ9ZB5FCDE"
 }

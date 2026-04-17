@@ -90,34 +90,45 @@ export default function App() {
   // Auto-seeding logic
   useEffect(() => {
     const autoSeed = async () => {
-      if (isSeedingRef.current) return;
+      if (isSeedingRef.current || !candidate || candidate.role !== 'admin') return;
       
-      // Only run if we have questions in the pool and it's less than the total available
-      // and if the user is an admin
-      if (candidate?.role === 'admin' && examPool.length < TRCN_QUESTIONS.length) {
-        isSeedingRef.current = true;
-        console.log("Auto-seeding missing questions...");
-        const existingTexts = new Set(examPool.map(q => q.text));
-        const questionsToSeed = TRCN_QUESTIONS.filter(q => !existingTexts.has(q.text));
-        
-        if (questionsToSeed.length > 0) {
-          const BATCH_SIZE = 500;
-          for (let i = 0; i < questionsToSeed.length; i += BATCH_SIZE) {
-            const batch = writeBatch(db);
-            const currentBatch = questionsToSeed.slice(i, i + BATCH_SIZE);
-            for (const q of currentBatch) {
-              const { id, ...qData } = q;
-              const newDocRef = doc(collection(db, 'questions'));
-              batch.set(newDocRef, qData);
-            }
-            await batch.commit();
-            console.log(`Seeded batch ${Math.floor(i/BATCH_SIZE) + 1}`);
+      try {
+        // Only run if we have questions in the pool and it's less than the total available
+        if (examPool.length < TRCN_QUESTIONS.length) {
+          isSeedingRef.current = true;
+          console.log("Auto-seeding missing questions...");
+          const existingTexts = new Set(examPool.map(q => q.text));
+          const questionsToSeed = TRCN_QUESTIONS.filter(q => !existingTexts.has(q.text));
+          
+          // Seed settings if missing
+          const settingsDoc = await getDoc(doc(db, 'config', 'exam_settings'));
+          if (!settingsDoc.exists()) {
+            console.log("Seeding initial exam settings...");
+            await setDoc(doc(db, 'config', 'exam_settings'), examSettings);
           }
-          // Refresh the pool after seeding
-          const qSnapshot = await getDocs(collection(db, 'questions'));
-          const questions = qSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Question));
-          setExamPool(questions);
+
+          if (questionsToSeed.length > 0) {
+            const BATCH_SIZE = 500;
+            for (let i = 0; i < questionsToSeed.length; i += BATCH_SIZE) {
+              const batch = writeBatch(db);
+              const currentBatch = questionsToSeed.slice(i, i + BATCH_SIZE);
+              for (const q of currentBatch) {
+                const { id, ...qData } = q;
+                const newDocRef = doc(collection(db, 'questions'));
+                batch.set(newDocRef, qData);
+              }
+              await batch.commit();
+              console.log(`Seeded batch ${Math.floor(i/BATCH_SIZE) + 1}`);
+            }
+            // Refresh the pool after seeding
+            const qSnapshot = await getDocs(collection(db, 'questions'));
+            const questions = qSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Question));
+            setExamPool(questions);
+          }
         }
+      } catch (error) {
+        console.error("Auto-seed error:", error);
+      } finally {
         isSeedingRef.current = false;
       }
     };
@@ -222,7 +233,7 @@ export default function App() {
 
   // Load exam settings
   useEffect(() => {
-    if (!isAuthReady) return;
+    if (!isAuthReady || !candidate) return;
     const unsubscribe = onSnapshot(doc(db, 'config', 'exam_settings'), (snapshot) => {
       if (snapshot.exists()) {
         setExamSettings(snapshot.data() as ExamSettings);
@@ -231,7 +242,7 @@ export default function App() {
       handleFirestoreError(error, OperationType.GET, 'config/exam_settings');
     });
     return () => unsubscribe();
-  }, [isAuthReady]);
+  }, [isAuthReady, !!candidate]);
 
   const handleLogin = async () => {
     setIsLoading(true);
@@ -242,26 +253,45 @@ export default function App() {
       const user = userCredential.user;
 
       // Check if user already exists in Firestore
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      let userDoc;
+      try {
+        userDoc = await getDoc(doc(db, 'users', user.uid));
+      } catch (error) {
+        console.error("Error fetching user profile during login:", error);
+        throw new Error(`Profile fetch failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
       
-      if (!userDoc.exists()) {
-        const isAdmin = user.email?.toLowerCase() === 'imageandkolors@gmail.com';
+      if (!userDoc || !userDoc.exists()) {
+        const isAdminUser = user.email?.toLowerCase() === 'imageandkolors@gmail.com';
         const userData = {
           uid: user.uid,
           name: user.displayName || 'Candidate',
           email: user.email,
-          regNumber: isAdmin ? 'ADMIN' : `TRCN/PQE/${new Date().getFullYear()}/${Math.floor(1000 + Math.random() * 9000)}`,
-          role: isAdmin ? 'admin' : 'candidate',
+          regNumber: isAdminUser ? 'ADMIN' : `TRCN/PQE/${new Date().getFullYear()}/${Math.floor(1000 + Math.random() * 9000)}`,
+          role: isAdminUser ? 'admin' : 'candidate',
           examStatus: 'not-started',
           pastAttempts: [],
           createdAt: serverTimestamp()
         };
 
-        await setDoc(doc(db, 'users', user.uid), userData);
+        try {
+          await setDoc(doc(db, 'users', user.uid), userData);
+        } catch (error) {
+          console.error("Error creating user profile during login:", error);
+          throw new Error(`Profile creation failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
       }
     } catch (error: any) {
       console.error("Login error:", error);
-      setLoginError(error.message || "An unexpected error occurred during login.");
+      let message = error.message || "An unexpected error occurred during login.";
+      
+      if (error.code === 'auth/configuration-not-found') {
+        message = "Auth Configuration Error: Please ensure you have enabled 'Google' as a Sign-in provider in your Firebase Console and added the app domains to 'Authorized Domains'.";
+      } else if (error.code === 'auth/unauthorized-domain') {
+        message = "Unauthorized Domain: This domain is not authorized in your Firebase Console for authentication.";
+      }
+      
+      setLoginError(message);
     } finally {
       setIsLoading(false);
     }

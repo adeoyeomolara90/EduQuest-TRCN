@@ -53,9 +53,12 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isAuthenticated() && 
-        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') || 
-         request.auth.token.email.matches("(?i)imageandkolors@gmail\\.com"));
+      // Temporarily only use email check to break any potential database recursion
+      return isAuthenticated() && request.auth.token.email == "imageandkolors@gmail.com";
+    }
+
+    function isSystemAdmin() {
+      return isAuthenticated() && request.auth.token.email == "imageandkolors@gmail.com";
     }
 
     function isValidUser(data) {
@@ -103,21 +106,35 @@ service cloud.firestore {
     // Rules
     // ===============================================================
 
-    match /config/{document=**} {
-      allow read: if true; // Allow public read for settings
-      allow write: if isAdmin() && isValidConfig(request.resource.data);
+    match /_connection_test_/ping {
+      allow read: if true;
     }
 
-    match /users/{uid} {
-      allow read: if isOwner(uid) || isAdmin();
-      allow create: if isAuthenticated() && isOwner(uid) && 
-        (request.resource.data.role == 'candidate' || (request.resource.data.role == 'admin' && request.auth.token.email == "imageandkolors@gmail.com"));
-      allow update: if isAdmin() || (isOwner(uid) && request.resource.data.role == resource.data.role);
+    match /config/exam_settings {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /users/{userId} {
+      // Owners can always read their own document
+      allow get: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Administrators can list all users and read any profile
+      allow list: if isAdmin();
+      allow get: if isAdmin();
+      
+      // Allow users to create their own record
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Allow users to update their own record, admins to update anything
+      allow update: if (isAuthenticated() && request.auth.uid == userId) || isAdmin();
+      
+      // Only admins can delete
       allow delete: if isAdmin();
     }
 
     match /questions/{questionId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow create, update: if isAdmin() && isValidQuestion(request.resource.data);
       allow delete: if isAdmin();
     }
